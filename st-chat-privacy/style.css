@@ -1,6 +1,6 @@
 /* The original home remains visible; active chat content defaults closed. */
-html:not([data-stpv-state="open"]):not([data-stpv-state="home"]) #sheld > :not(.stpv-ui),
-html:not([data-stpv-state="open"]):not([data-stpv-state="home"]) #sheld > :not(.stpv-ui) * {
+html:not([data-stpv-state="open"]):not([data-stpv-state="home"]):not([data-stpv-state="temporary"]) #sheld > :not(.stpv-ui),
+html:not([data-stpv-state="open"]):not([data-stpv-state="home"]):not([data-stpv-state="temporary"]) #sheld > :not(.stpv-ui) * {
     visibility: hidden !important;
     pointer-events: none !important;
     transition: none !important;
@@ -15,7 +15,8 @@ html:not([data-stpv-state="open"]):not([data-stpv-state="home"]) #sheld > :not(.
     font-family: inherit; text-align: center; text-shadow: none;
 }
 html[data-stpv-state="open"] #stpv-cover,
-html[data-stpv-state="home"] #stpv-cover { display: none !important; }
+html[data-stpv-state="home"] #stpv-cover,
+html[data-stpv-state="temporary"] #stpv-cover { display: none !important; }
 html:not([data-stpv-state="gate"]) #stpv-cover .stpv-card { display: none !important; }
 .welcomePanel .showRecentChats { display: none !important; }
 html:not([data-stpv-recents="open"]) .welcomePanel :is(.welcomeRecent, .recentChatsTitle, .recentChatsSettings, .hideRecentChats) {
@@ -60,7 +61,7 @@ html[data-stpv-manager="open"] #shadow_select_chat_popup { display: block !impor
     margin: 0; padding: 7px 12px; border-radius: 20px; font-size: 13px; opacity: 0.75;
 }
 #stpv-home:hover { opacity: 1; }
-html:not([data-stpv-state="open"]) #stpv-home { display: none !important; }
+html:not([data-stpv-state="open"]):not([data-stpv-state="temporary"]) #stpv-home { display: none !important; }
 @media (max-width: 600px) {
     #stpv-cover { padding: 16px; }
     .stpv-card { padding: 24px 18px; }

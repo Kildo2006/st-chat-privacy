@@ -15,12 +15,12 @@
     const guard = document.createElement('style');
     guard.id = 'stpv-critical-style';
     guard.textContent = [
-        'html:not([data-stpv-state="open"]):not([data-stpv-state="home"]) #sheld > :not(.stpv-ui),',
-        'html:not([data-stpv-state="open"]):not([data-stpv-state="home"]) #sheld > :not(.stpv-ui) * {',
+        'html:not([data-stpv-state="open"]):not([data-stpv-state="home"]):not([data-stpv-state="temporary"]) #sheld > :not(.stpv-ui),',
+        'html:not([data-stpv-state="open"]):not([data-stpv-state="home"]):not([data-stpv-state="temporary"]) #sheld > :not(.stpv-ui) * {',
         'visibility:hidden!important;pointer-events:none!important;',
         'transition:none!important;animation:none!important;}',
-        'html:not([data-stpv-state="open"]) #stpv-home{display:none!important;}',
-        'html[data-stpv-state="open"] #stpv-cover,html[data-stpv-state="home"] #stpv-cover{display:none!important;}',
+        'html:not([data-stpv-state="open"]):not([data-stpv-state="temporary"]) #stpv-home{display:none!important;}',
+        'html[data-stpv-state="open"] #stpv-cover,html[data-stpv-state="home"] #stpv-cover,html[data-stpv-state="temporary"] #stpv-cover{display:none!important;}',
         'html:not([data-stpv-state="gate"]) #stpv-cover .stpv-card{display:none!important;}',
         '.welcomePanel .showRecentChats{display:none!important;}',
         'html:not([data-stpv-recents="open"]) .welcomePanel :is(.welcomeRecent,.recentChatsTitle,.recentChatsSettings,.hideRecentChats){display:none!important;}',
@@ -35,6 +35,7 @@
     let epoch = 0, shownRef = null, gateTarget = null, message = '';
     let dateDigits = '', dateStamp = '', dateTimer = null;
     let recentsOpen = false, managerOwner = null;
+    let temporaryApproved = null;
     let shell, cover, heading, status, newButton, homeButton, corePromise, groupsPromise;
 
     function context() {
@@ -71,6 +72,17 @@
             (c.groupId === undefined || c.groupId === null || c.groupId === '') &&
             !!document.querySelector('#chat .welcomePanel');
     }
+    function temporaryMarker() {
+        const c = context();
+        if (!c || (c.characterId !== undefined && c.characterId !== null) ||
+            (c.groupId !== undefined && c.groupId !== null && c.groupId !== '') || validName(c.chatId)) return null;
+        const first = c.chat?.[0];
+        return first?.is_system === true && first.extra?.type === 'assistant_note' ? first : null;
+    }
+    function temporaryVisible() {
+        return temporaryApproved !== null && temporaryApproved === temporaryMarker() &&
+            !busy && !navigationPending && !document.hidden;
+    }
     function closeManager() {
         managerOwner = null;
         root.removeAttribute('data-stpv-manager');
@@ -103,9 +115,11 @@
         }
     }
     function syncView() {
+        if (temporaryApproved !== null && temporaryApproved !== temporaryMarker()) temporaryApproved = null;
         if (open) root.setAttribute(stateAttribute, 'open');
+        else if (temporaryVisible()) root.setAttribute(stateAttribute, 'temporary');
         else if (isHome()) root.setAttribute(stateAttribute, 'home');
-        else root.setAttribute(stateAttribute, currentRef() || !hooksReady ? 'gate' : 'loading');
+        else root.setAttribute(stateAttribute, currentRef() || temporaryMarker() || !hooksReady ? 'gate' : 'loading');
         if (recentsOpen && isHome() && !document.hidden) root.setAttribute('data-stpv-recents', 'open');
         else root.removeAttribute('data-stpv-recents');
         if (managerOwner && !busy && sameOwner(currentRef(), managerOwner) && !document.hidden) {
@@ -174,7 +188,7 @@
     function disable(node, value) { if (node && node.disabled !== value) node.disabled = value; }
     function updateInert() {
         if (!shell) return;
-        if (['open', 'home'].includes(root.getAttribute(stateAttribute))) {
+        if (['open', 'home', 'temporary'].includes(root.getAttribute(stateAttribute))) {
             for (const [node, wasInert] of inertStates) node.toggleAttribute('inert', wasInert);
             inertStates.clear();
         } else {
@@ -195,7 +209,7 @@
         const target = event.target;
         const editable = target instanceof Element && target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"]');
         const ready = hooksReady && !busy && !navigationPending && !document.hidden &&
-            (isHome() || (!open && !managerOwner && !!currentRef()));
+            (isHome() || (!open && !managerOwner && (!!currentRef() || (temporaryMarker() && !temporaryVisible()))));
         if (!ready || editable || event.isComposing || event.repeat || event.ctrlKey || event.metaKey || event.altKey || !/^[0-9]$/.test(event.key)) {
             resetDateCode();
             return false;
@@ -214,6 +228,7 @@
         if (dateDigits === month + day) {
             resetDateCode();
             if (isHome()) { recentsOpen = true; syncView(); }
+            else if (temporaryMarker()) { temporaryApproved = temporaryMarker(); syncView(); }
             else void showManager();
         }
         return true;
@@ -221,6 +236,7 @@
     function lockView() {
         root.removeAttribute(stateAttribute);
         open = false;
+        temporaryApproved = null;
         shownRef = null;
         const active = document.activeElement;
         if (active && shell?.contains(active)) active.blur?.();
@@ -248,12 +264,13 @@
     function render() {
         if (!cover) return;
         const ref = currentRef();
-        setText(heading, ref || navigationPending ? '是否新建一个聊天？' : '开始新的对话');
-        const idle = ref ? '为当前角色开启一段新对话。' : '从右侧选择一张角色卡。';
+        const temporary = temporaryMarker();
+        setText(heading, ref || temporary || navigationPending ? '是否新建一个聊天？' : '开始新的对话');
+        const idle = temporary ? '开启一段新的临时对话。' : ref ? '为当前角色开启一段新对话。' : '从右侧选择一张角色卡。';
         setText(status, !hooksReady ? '起始页尚未就绪，请刷新页面。' :
             busy ? '正在处理，请稍候…' : navigationPending ? '正在打开角色…' : message || idle);
-        disable(newButton, !hooksReady || busy || navigationPending || !ref);
-        disable(homeButton, !hooksReady || busy || navigationPending || !ref);
+        disable(newButton, !hooksReady || busy || navigationPending || (!ref && !temporary));
+        disable(homeButton, !hooksReady || busy || navigationPending || (!ref && !temporary));
         syncView();
     }
     function assertOwner(ref, core, allowGenerating = false) {
@@ -297,6 +314,7 @@
     }
 
     async function startNewChat() {
+        if (temporaryMarker()) { await changeTemporary(true); return; }
         await act(async (before, core) => {
             if (document.getElementById('send_textarea')?.value?.trim()) {
                 fail('输入框还有未发送内容，请先处理后再新建。');
@@ -404,12 +422,48 @@
         }
     }
     async function returnHome() {
+        if (temporaryMarker()) { await changeTemporary(false); return; }
         await act(async (_before, core) => {
             const closed = await core.closeCurrentChat();
             if (!closed) fail('请先停止生成，再返回首页。');
             gateTarget = null;
             return null;
         });
+    }
+    async function changeTemporary(create) {
+        if (!hooksReady || busy || navigationPending || document.hidden || (!isHome() && !temporaryMarker())) return;
+        const before = temporaryMarker();
+        hide();
+        const expectedEpoch = epoch;
+        busy = true;
+        render();
+        try {
+            const core = await coreApi();
+            if (expectedEpoch !== epoch || document.hidden) return;
+            if (core.isGenerating()) fail('请先停止生成，再进行此操作。');
+            const c = context();
+            if (!c || (c.characterId !== undefined && c.characterId !== null) ||
+                (c.groupId !== undefined && c.groupId !== null && c.groupId !== '') ||
+                validName(c.chatId) || temporaryMarker() !== before) fail('页面已切换，请重新操作。');
+            if (document.getElementById('send_textarea')?.value?.trim()) fail('输入框还有未发送内容，请先处理后再操作。');
+            if (create) {
+                if (typeof core.newAssistantChat !== 'function') fail('当前酒馆不支持打开临时聊天。');
+                await core.newAssistantChat({ temporary: true });
+                const marker = temporaryMarker();
+                if (!marker || marker === before) fail('未能打开新的临时聊天，请重试。');
+                if (expectedEpoch === epoch && !document.hidden) temporaryApproved = marker;
+            } else {
+                if (!await core.closeCurrentChat()) fail('请先停止生成，再返回首页。');
+                gateTarget = null;
+            }
+        } catch (error) {
+            message = error instanceof Error && error.message.startsWith('STPV:')
+                ? error.message.slice(5) : '操作未完成，请稍后重试。';
+        } finally {
+            busy = false;
+            render();
+            if (temporaryVisible()) document.getElementById('send_textarea')?.focus({ preventScroll: true });
+        }
     }
 
     function ensureUi() {
@@ -466,6 +520,14 @@
     function beforeNavigation(event) {
         resetDateCode();
         if (!(event.target instanceof Element)) return;
+        if (event.target.closest('.welcomePanel button.openTemporaryChat')) {
+            if (event.type === 'click') {
+                event.preventDefault();
+                event.stopImmediatePropagation();
+                if (isHome()) void changeTemporary(true);
+            }
+            return;
+        }
         if (event.target.closest('.welcomePanel .hideRecentChats')) {
             if (event.type === 'click') {
                 event.preventDefault();
@@ -563,7 +625,7 @@
     document.addEventListener('keydown', event => {
         if (event.key === 'Escape') { hide(); return; }
         if (handleDateCode(event)) return;
-        if (!open && !isHome() && event.target instanceof Element && shell?.contains(event.target) && !event.target.closest('.stpv-ui')) {
+        if (!open && !isHome() && !temporaryVisible() && event.target instanceof Element && shell?.contains(event.target) && !event.target.closest('.stpv-ui')) {
             event.preventDefault();
             event.stopImmediatePropagation();
         }
