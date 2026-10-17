@@ -1,0 +1,12 @@
+{
+  "display_name": "聊天起始页",
+  "loading_order": -100,
+  "requires": [],
+  "optional": [],
+  "js": "index.js",
+  "css": "style.css",
+  "author": "Local Chat Privacy",
+  "version": "0.3.5",
+  "minimum_client_version": "1.18.0",
+  "auto_update": false
+}
