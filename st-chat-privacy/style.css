@@ -16,6 +16,7 @@ html:not([data-stpv-state="open"]):not([data-stpv-state="home"]) #sheld > :not(.
 }
 html[data-stpv-state="open"] #stpv-cover,
 html[data-stpv-state="home"] #stpv-cover { display: none !important; }
+html:not([data-stpv-state="gate"]) #stpv-cover .stpv-card { display: none !important; }
 .welcomePanel .showRecentChats { display: none !important; }
 html:not([data-stpv-recents="open"]) .welcomePanel :is(.welcomeRecent, .recentChatsTitle, .recentChatsSettings, .hideRecentChats) {
     display: none !important;
@@ -23,9 +24,6 @@ html:not([data-stpv-recents="open"]) .welcomePanel :is(.welcomeRecent, .recentCh
 html[data-stpv-recents="open"] .welcomePanel .welcomeRecent,
 html[data-stpv-recents="open"] .welcomePanel .recentChatsTitle { display: block !important; }
 html[data-stpv-recents="open"] .welcomePanel :is(.recentChatsSettings, .hideRecentChats) { display: flex !important; }
-.welcomePanel :is(.welcomeHeaderVersionDisplay, .welcomeHeaderLogo) {
-    user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; touch-action: none;
-}
 html:not([data-stpv-state="open"]):not([data-stpv-manager="open"]) #shadow_select_chat_popup { display: none !important; }
 html[data-stpv-manager="open"] #shadow_select_chat_popup { display: block !important; opacity: 1 !important; }
 .stpv-card {
@@ -41,7 +39,7 @@ html[data-stpv-manager="open"] #shadow_select_chat_popup { display: block !impor
 }
 #stpv-title {
     user-select: none; -webkit-user-select: none;
-    -webkit-touch-callout: none; touch-action: none; cursor: default;
+    cursor: default;
 }
 .stpv-status { margin: 0; min-height: 48px; font-size: 14px; line-height: 1.7; opacity: 0.72; }
 .stpv-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 22px; }

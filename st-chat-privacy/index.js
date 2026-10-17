@@ -7,7 +7,6 @@
     const stateAttribute = 'data-stpv-state';
     const storageKey = 'stpv_navigation_v2';
     const navigationSelector = '.character_select, .group_select, .recentChat, .select_chat_block';
-    const homePressSelector = '.welcomeHeaderVersionDisplay, .welcomeHeaderLogo';
     const welcomeTargets = new Set(['sys-settings-button', 'rightNavHolder', 'extensions-settings-button']);
     const inertStates = new Map();
     root.removeAttribute(stateAttribute);
@@ -22,6 +21,7 @@
         'transition:none!important;animation:none!important;}',
         'html:not([data-stpv-state="open"]) #stpv-home{display:none!important;}',
         'html[data-stpv-state="open"] #stpv-cover,html[data-stpv-state="home"] #stpv-cover{display:none!important;}',
+        'html:not([data-stpv-state="gate"]) #stpv-cover .stpv-card{display:none!important;}',
         '.welcomePanel .showRecentChats{display:none!important;}',
         'html:not([data-stpv-recents="open"]) .welcomePanel :is(.welcomeRecent,.recentChatsTitle,.recentChatsSettings,.hideRecentChats){display:none!important;}',
         'html[data-stpv-recents="open"] .welcomePanel .welcomeRecent,html[data-stpv-recents="open"] .welcomePanel .recentChatsTitle{display:block!important;}',
@@ -32,7 +32,8 @@
     document.head.appendChild(guard);
 
     let open = false, hooksReady = false, busy = false, navigationPending = false;
-    let epoch = 0, shownRef = null, gateTarget = null, message = '', press = null;
+    let epoch = 0, shownRef = null, gateTarget = null, message = '';
+    let dateDigits = '', dateStamp = '', dateTimer = null;
     let recentsOpen = false, managerOwner = null;
     let shell, cover, heading, status, newButton, homeButton, corePromise, groupsPromise;
 
@@ -74,7 +75,11 @@
         managerOwner = null;
         root.removeAttribute('data-stpv-manager');
         const popup = document.getElementById('shadow_select_chat_popup');
-        if (popup) popup.style.display = 'none';
+        if (popup) {
+            const active = document.activeElement;
+            if (active && popup.contains(active)) active.blur?.();
+            popup.style.display = 'none';
+        }
     }
     function repairHomeShortcuts() {
         // Some message rerenders prefix native UI classes with "custom-".
@@ -100,7 +105,7 @@
     function syncView() {
         if (open) root.setAttribute(stateAttribute, 'open');
         else if (isHome()) root.setAttribute(stateAttribute, 'home');
-        else root.removeAttribute(stateAttribute);
+        else root.setAttribute(stateAttribute, currentRef() || !hooksReady ? 'gate' : 'loading');
         if (recentsOpen && isHome() && !document.hidden) root.setAttribute('data-stpv-recents', 'open');
         else root.removeAttribute('data-stpv-recents');
         if (managerOwner && !busy && sameOwner(currentRef(), managerOwner) && !document.hidden) {
@@ -180,23 +185,52 @@
             }
         }
     }
-    function cancelPress() {
-        if (press) clearTimeout(press.timer);
-        press = null;
+    function resetDateCode() {
+        if (dateTimer !== null) clearTimeout(dateTimer);
+        dateTimer = null;
+        dateDigits = '';
+        dateStamp = '';
+    }
+    function handleDateCode(event) {
+        const target = event.target;
+        const editable = target instanceof Element && target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"]');
+        const ready = hooksReady && !busy && !navigationPending && !document.hidden &&
+            (isHome() || (!open && !managerOwner && !!currentRef()));
+        if (!ready || editable || event.isComposing || event.repeat || event.ctrlKey || event.metaKey || event.altKey || !/^[0-9]$/.test(event.key)) {
+            resetDateCode();
+            return false;
+        }
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        const now = new Date();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        const stamp = String(now.getFullYear()) + month + day;
+        if (dateStamp !== stamp) resetDateCode();
+        dateStamp = stamp;
+        dateDigits = (dateDigits + event.key).slice(-4);
+        if (dateTimer !== null) clearTimeout(dateTimer);
+        dateTimer = setTimeout(resetDateCode, 3000);
+        if (dateDigits === month + day) {
+            resetDateCode();
+            if (isHome()) { recentsOpen = true; syncView(); }
+            else void showManager();
+        }
+        return true;
     }
     function lockView() {
         root.removeAttribute(stateAttribute);
         open = false;
         shownRef = null;
         const active = document.activeElement;
-        if (active && shell?.contains(active) && !active.closest('.stpv-ui')) active.blur?.();
+        if (active && shell?.contains(active)) active.blur?.();
         updateInert();
     }
     function hide(reason = 'privacy') {
         if (reason === 'entry') gateTarget = entryTarget(currentRef());
         else if (open) gateTarget = currentRef();
         epoch++;
-        cancelPress();
+        resetDateCode();
         recentsOpen = false;
         closeManager();
         lockView();
@@ -243,7 +277,7 @@
         const start = currentRef();
         const expectedEpoch = epoch;
         busy = true;
-        cancelPress();
+        resetDateCode();
         lockView();
         message = '';
         render();
@@ -290,10 +324,6 @@
             }
         });
     }
-    async function restoreChat() {
-        const requested = gateTarget ?? entryTarget(currentRef());
-        await openChosenChat(requested);
-    }
     async function openChosenChat(requested) {
         if (!validRef(requested)) return;
         closeManager();
@@ -318,14 +348,15 @@
         closeManager();
         await act(async (before, core) => {
             if (typeof core.displayPastChats !== 'function') fail('当前酒馆不支持打开聊天管理。');
-            await core.saveChatConditional();
-            assertOwner(before, core);
-            await core.displayPastChats();
+            if (!core.isGenerating()) await core.saveChatConditional();
+            assertOwner(before, core, true);
+            const previous = gateTarget ?? entryTarget(before);
+            await core.displayPastChats(validRef(previous) ? [previous.file] : []);
             if (expectedEpoch === epoch && sameRef(currentRef(), before) && !document.hidden) {
                 managerOwner = { ...before };
             }
             return null;
-        });
+        }, true);
     }
     async function openRecent(requested) {
         if (!validRef(requested) || !hooksReady || busy || !isHome() || !recentsOpen || document.hidden) return;
@@ -381,30 +412,6 @@
         });
     }
 
-    function startPress(event, action = 'chat') {
-        if (event.button !== undefined && event.button !== 0) return;
-        if (event.isPrimary === false || busy || navigationPending || !hooksReady || document.hidden) return;
-        if (action === 'home' ? !isHome() : !currentRef()) return;
-        cancelPress();
-        const startEpoch = epoch;
-        const start = currentRef();
-        const target = event.target;
-        const manager = action === 'chat' && event.altKey;
-        const token = { x: event.clientX ?? 0, y: event.clientY ?? 0, timer: null, target };
-        token.timer = setTimeout(() => {
-            if (press !== token) return;
-            press = null;
-            if (epoch !== startEpoch || document.hidden || !target.isConnected) return;
-            if (action === 'home' && isHome()) {
-                recentsOpen = !recentsOpen;
-                syncView();
-            } else if (sameRef(currentRef(), start)) {
-                if (manager) void showManager();
-                else void restoreChat();
-            }
-        }, 2000);
-        press = token;
-    }
     function ensureUi() {
         if (!shell) return;
         if (!cover || !shell.contains(cover)) {
@@ -416,9 +423,6 @@
             heading = element('h2', '', '是否新建一个聊天？');
             heading.id = 'stpv-title';
             heading.tabIndex = -1;
-            heading.addEventListener('pointerdown', event => startPress(event));
-            heading.addEventListener('pointerleave', cancelPress);
-            heading.addEventListener('contextmenu', event => event.preventDefault());
             card.appendChild(heading);
             status = element('p', 'stpv-status');
             status.setAttribute('aria-live', 'polite');
@@ -447,7 +451,7 @@
         render();
     }
     function onChatChanged() {
-        cancelPress();
+        resetDateCode();
         recentsOpen = false;
         closeManager();
         lockView();
@@ -460,6 +464,7 @@
         render();
     }
     function beforeNavigation(event) {
+        resetDateCode();
         if (!(event.target instanceof Element)) return;
         if (event.target.closest('.welcomePanel .hideRecentChats')) {
             if (event.type === 'click') {
@@ -555,24 +560,9 @@
 
     document.addEventListener('pointerdown', beforeNavigation, true);
     document.addEventListener('click', beforeNavigation, true);
-    document.addEventListener('pointerdown', event => {
-        if (event.target instanceof Element && event.target.closest(homePressSelector)?.closest('.welcomePanel')) {
-            startPress(event, 'home');
-        }
-    }, true);
-    document.addEventListener('pointerout', event => {
-        if (press && event.target === press.target && !press.target.contains(event.relatedTarget)) cancelPress();
-    }, true);
-    document.addEventListener('contextmenu', event => {
-        if (event.target instanceof Element && event.target.closest(homePressSelector)) event.preventDefault();
-    }, true);
-    document.addEventListener('pointerup', cancelPress, true);
-    document.addEventListener('pointercancel', cancelPress, true);
-    document.addEventListener('pointermove', event => {
-        if (press && Math.hypot((event.clientX ?? 0) - press.x, (event.clientY ?? 0) - press.y) > 12) cancelPress();
-    }, true);
     document.addEventListener('keydown', event => {
-        if (event.key === 'Escape') { hide(); heading?.focus({ preventScroll: true }); return; }
+        if (event.key === 'Escape') { hide(); return; }
+        if (handleDateCode(event)) return;
         if (!open && !isHome() && event.target instanceof Element && shell?.contains(event.target) && !event.target.closest('.stpv-ui')) {
             event.preventDefault();
             event.stopImmediatePropagation();
