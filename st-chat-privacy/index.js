@@ -8,6 +8,7 @@
     const storageKey = 'stpv_navigation_v2';
     const navigationSelector = '.character_select, .group_select, .recentChat, .select_chat_block';
     const homePressSelector = '.welcomeHeaderVersionDisplay, .welcomeHeaderLogo';
+    const welcomeTargets = new Set(['sys-settings-button', 'rightNavHolder', 'extensions-settings-button']);
     const inertStates = new Map();
     root.removeAttribute(stateAttribute);
     root.removeAttribute('data-stpv-recents');
@@ -75,6 +76,27 @@
         const popup = document.getElementById('shadow_select_chat_popup');
         if (popup) popup.style.display = 'none';
     }
+    function repairHomeShortcuts() {
+        // Some message rerenders prefix native UI classes with "custom-".
+        // Restore only the three known shortcuts in the native system prompt.
+        // Ordinary assistant/user messages must never gain native UI privileges.
+        const c = context();
+        for (const message of document.querySelectorAll('#chat > .mes[type="welcome_prompt"][is_system="true"]')) {
+            const id = message.getAttribute('mesid');
+            if (id === null || !/^\d+$/.test(id)) continue;
+            const original = c?.chat?.[Number(id)];
+            if (!original?.is_system || original.extra?.type !== 'welcome_prompt') continue;
+            for (const button of message.querySelectorAll('.mes_text button[data-target]')) {
+                if (button.closest('.mes') !== message || !welcomeTargets.has(button.getAttribute('data-target'))) continue;
+                for (const name of ['menu_button', 'menu_button_icon', 'drawer-opener', 'inline-flex']) {
+                    if (button.classList.contains('custom-' + name)) button.classList.remove('custom-' + name);
+                    if (!button.classList.contains(name)) button.classList.add(name);
+                }
+                if (button.disabled) button.disabled = false;
+                if (button.type !== 'button') button.type = 'button';
+            }
+        }
+    }
     function syncView() {
         if (open) root.setAttribute(stateAttribute, 'open');
         else if (isHome()) root.setAttribute(stateAttribute, 'home');
@@ -85,6 +107,7 @@
             root.setAttribute('data-stpv-manager', 'open');
         } else root.removeAttribute('data-stpv-manager');
         updateInert();
+        if (isHome()) repairHomeShortcuts();
     }
 
     function entries() {
