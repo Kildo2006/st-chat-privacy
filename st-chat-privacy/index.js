@@ -19,7 +19,7 @@
         'html:not([data-stpv-state="open"]):not([data-stpv-state="home"]):not([data-stpv-state="temporary"]) #sheld > :not(.stpv-ui) * {',
         'visibility:hidden!important;pointer-events:none!important;',
         'transition:none!important;animation:none!important;}',
-        'html:not([data-stpv-state="open"]):not([data-stpv-state="temporary"]) #stpv-home{display:none!important;}',
+        'html:not([data-stpv-state="open"]):not([data-stpv-state="temporary"]) #stpv-toolbar{display:none!important;}',
         'html[data-stpv-state="open"] #stpv-cover,html[data-stpv-state="home"] #stpv-cover,html[data-stpv-state="temporary"] #stpv-cover{display:none!important;}',
         'html:not([data-stpv-state="gate"]) #stpv-cover .stpv-card{display:none!important;}',
         '.welcomePanel .showRecentChats{display:none!important;}',
@@ -116,7 +116,7 @@
     }
     function syncView() {
         if (temporaryApproved !== null && temporaryApproved !== temporaryMarker()) temporaryApproved = null;
-        if (open) root.setAttribute(stateAttribute, 'open');
+        if (open && sameRef(currentRef(), shownRef) && !document.hidden) root.setAttribute(stateAttribute, 'open');
         else if (temporaryVisible()) root.setAttribute(stateAttribute, 'temporary');
         else if (isHome()) root.setAttribute(stateAttribute, 'home');
         else root.setAttribute(stateAttribute, currentRef() || temporaryMarker() || !hooksReady ? 'gate' : 'loading');
@@ -495,12 +495,20 @@
             cover.appendChild(card);
             shell.appendChild(cover);
         }
-        if (!shell.querySelector('#stpv-home')) {
-            const button = element('button', 'stpv-ui stpv-home-button', '起始页');
+        let toolbar = shell.querySelector('#stpv-toolbar');
+        if (!toolbar) {
+            // Reserve a normal flex row instead of floating over native chat controls.
+            toolbar = element('div', 'stpv-ui');
+            toolbar.id = 'stpv-toolbar';
+            shell.insertBefore(toolbar, shell.firstChild);
+        }
+        if (!toolbar.querySelector('#stpv-home')) {
+            const button = element('button', 'stpv-home-button', '起始页');
             button.id = 'stpv-home';
             button.type = 'button';
+            button.title = '收起当前聊天';
             button.addEventListener('click', () => hide());
-            shell.appendChild(button);
+            toolbar.appendChild(button);
         }
         render();
     }
@@ -630,7 +638,14 @@
             event.stopImmediatePropagation();
         }
     }, true);
-    document.addEventListener('visibilitychange', () => { if (document.hidden) hide(); });
+    document.addEventListener('visibilitychange', () => {
+        // A background tab is temporarily covered by syncView. Keep the existing
+        // conversation/list grants so returning restores the same view. Explicit
+        // hiding, navigation and page restoration still revoke those grants.
+        resetDateCode();
+        if (open && !sameRef(currentRef(), shownRef)) hide('entry');
+        else render();
+    });
     window.addEventListener('pagehide', () => hide());
     window.addEventListener('pageshow', () => hide('entry'));
     if (document.getElementById('sheld')) initialize();

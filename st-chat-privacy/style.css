@@ -56,12 +56,17 @@ html[data-stpv-manager="open"] #shadow_select_chat_popup { display: block !impor
 #stpv-new:focus-visible, #stpv-home-action:focus-visible, #stpv-home:focus-visible {
     outline: 2px solid var(--SmartThemeBodyColor, #ececec); outline-offset: 3px;
 }
+#stpv-toolbar {
+    display: flex; flex: 0 0 auto; justify-content: flex-end; align-items: center;
+    box-sizing: border-box; min-width: 0; padding: 6px 12px;
+    background: var(--SmartThemeChatTintColor, transparent);
+}
 #stpv-home {
-    position: absolute; top: 12px; right: 12px; z-index: 2001;
-    margin: 0; padding: 7px 12px; border-radius: 20px; font-size: 13px; opacity: 0.75;
+    position: static; max-width: 100%;
+    margin: 0; padding: 5px 12px; border-radius: 20px; font-size: 13px; opacity: 0.75;
 }
 #stpv-home:hover { opacity: 1; }
-html:not([data-stpv-state="open"]):not([data-stpv-state="temporary"]) #stpv-home { display: none !important; }
+html:not([data-stpv-state="open"]):not([data-stpv-state="temporary"]) #stpv-toolbar { display: none !important; }
 @media (max-width: 600px) {
     #stpv-cover { padding: 16px; }
     .stpv-card { padding: 24px 18px; }
